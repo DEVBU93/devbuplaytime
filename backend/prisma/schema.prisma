@@ -1,0 +1,304 @@
+// DevBuPlaytime - Prisma Schema
+// DB: PostgreSQL (migrable a SQL Server con proveedor sqlserver)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── 1. USERS ─────────────────────────────────────────────────────────────────
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String
+  role          Role      @default(PLAYER)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       UserProfile?
+  progress      UserProgress[]
+  quizSessions  QuizSession[]
+  arenaSessions ArenaSession[]
+  cosmetics     UserCosmetic[]
+  achievements  UserAchievement[]
+
+  @@map("users")
+}
+
+enum Role {
+  PLAYER
+  ADMIN
+  MODERATOR
+}
+
+// ─── 2. USER PROFILES ─────────────────────────────────────────────────────────
+model UserProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  displayName String?
+  avatar      String?  @default("default_avatar.png")
+  bio         String?
+  level       Int      @default(1)
+  xp          Int      @default(0)
+  coins       Int      @default(0)
+  gems        Int      @default(0)
+  streak      Int      @default(0)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+// ─── 3. USER PROGRESS ─────────────────────────────────────────────────────────
+model UserProgress {
+  id          String   @id @default(uuid())
+  userId      String
+  missionId   String
+  status      ProgressStatus @default(NOT_STARTED)
+  score       Int      @default(0)
+  attempts    Int      @default(0)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission     Mission  @relation(fields: [missionId], references: [id])
+
+  @@unique([userId, missionId])
+  @@map("user_progress")
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// ─── 4. WORLDS ────────────────────────────────────────────────────────────────
+model World {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  slug        String    @unique
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  chapters    Chapter[]
+
+  @@map("worlds")
+}
+
+// ─── 5. CHAPTERS ──────────────────────────────────────────────────────────────
+model Chapter {
+  id          String    @id @default(uuid())
+  worldId     String
+  name        String
+  description String?
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  world       World     @relation(fields: [worldId], references: [id])
+  missions    Mission[]
+
+  @@map("chapters")
+}
+
+// ─── 6. MISSIONS ──────────────────────────────────────────────────────────────
+model Mission {
+  id           String    @id @default(uuid())
+  chapterId    String
+  name         String
+  description  String?
+  type         MissionType @default(QUIZ)
+  order        Int       @default(0)
+  xpReward     Int       @default(10)
+  coinReward   Int       @default(5)
+  timeLimit    Int?      // seconds
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  chapter      Chapter   @relation(fields: [chapterId], references: [id])
+  questions    Question[]
+  progress     UserProgress[]
+
+  @@map("missions")
+}
+
+enum MissionType {
+  QUIZ
+  CHALLENGE
+  BOSS
+  TUTORIAL
+}
+
+// ─── 7. QUESTIONS ─────────────────────────────────────────────────────────────
+model Question {
+  id           String    @id @default(uuid())
+  missionId    String?
+  text         String
+  type         QuestionType @default(MULTIPLE_CHOICE)
+  options      Json      // Array de opciones
+  correctAnswer String
+  explanation  String?
+  difficulty   Difficulty @default(MEDIUM)
+  points       Int       @default(10)
+  timeLimit    Int?      // seconds
+  imageUrl     String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  mission      Mission?  @relation(fields: [missionId], references: [id])
+
+  @@map("questions")
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  ORDER
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+// ─── 8. QUIZ SESSIONS ─────────────────────────────────────────────────────────
+model QuizSession {
+  id           String    @id @default(uuid())
+  userId       String
+  missionId    String
+  score        Int       @default(0)
+  totalPoints  Int       @default(0)
+  correctCount Int       @default(0)
+  wrongCount   Int       @default(0)
+  timeSpent    Int       @default(0) // seconds
+  status       SessionStatus @default(ACTIVE)
+  answers      Json      // Array de respuestas
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_sessions")
+}
+
+// ─── 9. ARENA SESSIONS ────────────────────────────────────────────────────────
+model ArenaSession {
+  id           String    @id @default(uuid())
+  userId       String
+  roomCode     String
+  isHost       Boolean   @default(false)
+  score        Int       @default(0)
+  rank         Int?
+  status       SessionStatus @default(ACTIVE)
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("arena_sessions")
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+// ─── 10. COSMETICS ────────────────────────────────────────────────────────────
+model Cosmetic {
+  id           String    @id @default(uuid())
+  name         String
+  type         CosmeticType
+  rarity       Rarity    @default(COMMON)
+  price        Int       @default(0)
+  imageUrl     String?
+  description  String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  userCosmetics UserCosmetic[]
+
+  @@map("cosmetics")
+}
+
+enum CosmeticType {
+  AVATAR
+  BORDER
+  BADGE
+  TITLE
+  THEME
+}
+
+enum Rarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+// ─── 11. USER COSMETICS ───────────────────────────────────────────────────────
+model UserCosmetic {
+  id          String   @id @default(uuid())
+  userId      String
+  cosmeticId  String
+  isEquipped  Boolean  @default(false)
+  obtainedAt  DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic    Cosmetic @relation(fields: [cosmeticId], references: [id])
+
+  @@unique([userId, cosmeticId])
+  @@map("user_cosmetics")
+}
+
+// ─── 12. ACHIEVEMENTS ────────────────────────────────────────────────────────
+model Achievement {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  icon        String?
+  xpReward    Int      @default(0)
+  coinReward  Int      @default(0)
+  condition   Json     // { type, target, value }
+  createdAt   DateTime @default(now())
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String   @id @default(uuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
