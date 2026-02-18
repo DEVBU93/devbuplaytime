@@ -1,0 +1,47 @@
+# DevBuPlaytime - Docker Compose
+# Levanta PostgreSQL + pgAdmin en local para desarrollo
+
+version: '3.8'
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: devbuplaytime_postgres
+    environment:
+      POSTGRES_USER: devbu_user
+      POSTGRES_PASSWORD: devbu_pass
+      POSTGRES_DB: devbuplaytime
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U devbu_user -d devbuplaytime']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── pgAdmin (GUI para PostgreSQL) ──────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: devbuplaytime_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@devbuplaytime.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - '5050:80'
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: devbuplaytime_postgres_data
+
+# ─── Uso ────────────────────────────────────────────────────────────────────────────
+# docker-compose up -d           -> Levanta contenedores
+# docker-compose down            -> Para contenedores
+# docker-compose logs -f         -> Ver logs en tiempo real
+# pgAdmin: http://localhost:5050  -> GUI de base de datos
